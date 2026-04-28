@@ -577,8 +577,20 @@ async def fetch_rum_events(
     query: Optional[str] = None,
     limit: int = 50,
     cursor: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    sort: str = "-timestamp",
 ) -> Dict[str, Any]:
-    """Fetch RUM events from Datadog API."""
+    """Fetch RUM events from Datadog API.
+
+    from_date/to_date take ISO 8601 strings (e.g. "2026-04-05T00:00:00Z")
+    and override time_range when provided. Useful for getting historical
+    data outside the rolling time_range window or for narrow comparisons.
+
+    sort accepts "timestamp" (oldest first) or "-timestamp" (newest first,
+    default). Use ascending sort to walk forward through a long history
+    when the 1000-event cap would otherwise hide older data.
+    """
     url = f"{DATADOG_API_URL}/api/v2/rum/events/search"
 
     headers = {
@@ -597,13 +609,16 @@ async def fetch_rum_events(
 
     combined_query = " AND ".join(query_parts) if query_parts else "*"
 
+    from_value = from_date if from_date else f"now-{time_range}"
+    to_value = to_date if to_date else "now"
+
     payload: Dict[str, Any] = {
         "filter": {
             "query": combined_query,
-            "from": f"now-{time_range}",
-            "to": "now",
+            "from": from_value,
+            "to": to_value,
         },
-        "sort": "-timestamp",
+        "sort": sort,
         "page": {"limit": limit},
     }
 

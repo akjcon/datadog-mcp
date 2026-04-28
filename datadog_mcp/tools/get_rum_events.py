@@ -54,6 +54,20 @@ def get_tool_definition() -> Tool:
                     "description": "Pagination cursor from previous response (for getting next page)",
                     "default": "",
                 },
+                "from_date": {
+                    "type": "string",
+                    "description": "Absolute start (ISO 8601, e.g. '2026-04-05T00:00:00Z'). Overrides time_range when provided. Use to query historical windows beyond the rolling time_range presets.",
+                },
+                "to_date": {
+                    "type": "string",
+                    "description": "Absolute end (ISO 8601). Overrides time_range when provided.",
+                },
+                "sort": {
+                    "type": "string",
+                    "description": "Sort order. '-timestamp' (newest first, default) or 'timestamp' (oldest first). Use ascending sort to walk forward through long histories where the 1000-event cap would otherwise hide older data.",
+                    "enum": ["-timestamp", "timestamp"],
+                    "default": "-timestamp",
+                },
                 "format": {
                     "type": "string",
                     "description": "Output format",
@@ -77,6 +91,9 @@ async def handle_call(request: CallToolRequest) -> CallToolResult:
         query = args.get("query")
         limit = args.get("limit", 50)
         cursor = args.get("cursor", "")
+        from_date = args.get("from_date")
+        to_date = args.get("to_date")
+        sort = args.get("sort", "-timestamp")
         format_type = args.get("format", "table")
 
         response = await fetch_rum_events(
@@ -85,6 +102,9 @@ async def handle_call(request: CallToolRequest) -> CallToolResult:
             query=query,
             limit=limit,
             cursor=cursor if cursor else None,
+            from_date=from_date,
+            to_date=to_date,
+            sort=sort,
         )
 
         rum_events = response.get("data", [])
