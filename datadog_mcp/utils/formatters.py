@@ -333,6 +333,47 @@ def extract_rum_event_info(events: List[Dict[str, Any]]) -> List[Dict[str, str]]
             if error.get("source"):
                 entry["error_source"] = error["source"]
 
+        # Connectivity — auto-collected by the RUM SDK. Lets us tell whether
+        # a slow event was a slow-2g/3g cell connection vs a real backend
+        # problem on a healthy network.
+        connectivity = inner.get("connectivity", {})
+        if connectivity:
+            if connectivity.get("status"):
+                entry["connectivity.status"] = connectivity["status"]
+            if connectivity.get("effective_type"):
+                entry["connectivity.effective_type"] = connectivity[
+                    "effective_type"
+                ]
+            interfaces = connectivity.get("interfaces")
+            if interfaces:
+                entry["connectivity.interfaces"] = (
+                    ",".join(interfaces) if isinstance(interfaces, list) else str(interfaces)
+                )
+            cellular = connectivity.get("cellular", {})
+            if cellular and cellular.get("technology"):
+                entry["connectivity.cellular.technology"] = cellular[
+                    "technology"
+                ]
+
+        # Geo (auto-collected from IP)
+        geo = inner.get("geo", {})
+        if geo:
+            if geo.get("country_iso_code"):
+                entry["geo.country"] = geo["country_iso_code"]
+            if geo.get("city"):
+                entry["geo.city"] = geo["city"]
+
+        # Device + OS + browser (auto-collected)
+        device = inner.get("device", {})
+        if device and device.get("type"):
+            entry["device.type"] = device["type"]
+        os_info = inner.get("os", {})
+        if os_info and os_info.get("name"):
+            entry["os.name"] = os_info["name"]
+        browser = inner.get("browser", {})
+        if browser and browser.get("name"):
+            entry["browser.name"] = browser["name"]
+
         # Tags
         tags = attrs.get("tags", [])
         if tags and isinstance(tags, list):
