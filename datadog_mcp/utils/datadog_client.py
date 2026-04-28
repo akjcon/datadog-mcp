@@ -571,6 +571,58 @@ async def fetch_metric_field_values(
             raise
 
 
+async def fetch_rum_events(
+    time_range: str = "1h",
+    filters: Optional[Dict[str, str]] = None,
+    query: Optional[str] = None,
+    limit: int = 50,
+    cursor: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Fetch RUM events from Datadog API."""
+    url = f"{DATADOG_API_URL}/api/v2/rum/events/search"
+
+    headers = {
+        "Content-Type": "application/json",
+        "DD-API-KEY": DATADOG_API_KEY,
+        "DD-APPLICATION-KEY": DATADOG_APP_KEY,
+    }
+
+    # Build query filter
+    query_parts = []
+    if filters:
+        for key, value in filters.items():
+            query_parts.append(f"@{key}:{value}")
+    if query:
+        query_parts.append(query)
+
+    combined_query = " AND ".join(query_parts) if query_parts else "*"
+
+    payload: Dict[str, Any] = {
+        "filter": {
+            "query": combined_query,
+            "from": f"now-{time_range}",
+            "to": "now",
+        },
+        "sort": "-timestamp",
+        "page": {"limit": limit},
+    }
+
+    if cursor:
+        payload["page"]["cursor"] = cursor
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(url, headers=headers, json=payload)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"HTTP error fetching RUM events: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Error fetching RUM events: {e}")
+            raise
+
+
 async def fetch_service_definitions(
     page_size: int = 10,
     page_number: int = 0,

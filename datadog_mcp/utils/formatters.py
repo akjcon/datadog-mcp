@@ -256,6 +256,138 @@ def format_logs_as_text(logs: List[Dict[str, str]]) -> str:
     return "\n".join(lines)
 
 
+def extract_rum_event_info(events: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+    """Extract relevant information from RUM events."""
+    results = []
+
+    for event in events:
+        attrs = event.get("attributes", {})
+        inner = attrs.get("attributes", {})
+
+        entry: Dict[str, str] = {
+            "timestamp": attrs.get("timestamp", ""),
+            "type": inner.get("evt", {}).get("name", attrs.get("type", "")),
+            "service": attrs.get("service", "unknown"),
+        }
+
+        # Action info
+        action = inner.get("action", {})
+        if action:
+            entry["action_name"] = action.get("name", "")
+            entry["action_type"] = action.get("type", "")
+
+        # View info
+        view = inner.get("view", {})
+        if view:
+            entry["view_name"] = view.get("name", "")
+            entry["view_url"] = view.get("url", "")
+
+        # Session info
+        session = inner.get("session", {})
+        if session:
+            entry["session_id"] = session.get("id", "")
+
+        # User info
+        usr = inner.get("usr", {})
+        if usr:
+            if usr.get("email"):
+                entry["user_email"] = usr["email"]
+            if usr.get("id"):
+                entry["user_id"] = usr["id"]
+
+        # Context (custom attributes from trackAction)
+        context = inner.get("context", {})
+        if context and isinstance(context, dict):
+            for key, value in context.items():
+                entry[f"context.{key}"] = str(value)
+
+        # Error info if present
+        error = inner.get("error", {})
+        if error:
+            if error.get("message"):
+                entry["error_message"] = error["message"]
+            if error.get("source"):
+                entry["error_source"] = error["source"]
+
+        # Tags
+        tags = attrs.get("tags", [])
+        if tags and isinstance(tags, list):
+            relevant = [t for t in tags if any(p in t for p in ["env:", "version:", "service:"])]
+            if relevant:
+                entry["tags"] = ", ".join(relevant)
+
+        results.append(entry)
+
+    return results
+
+
+def format_rum_events_as_table(events: List[Dict[str, str]], max_width: int = 60) -> str:
+    """Format RUM events as a table."""
+    if not events:
+        return "No RUM events found."
+
+    # Dynamic columns: find all keys across events
+    all_keys = []
+    seen = set()
+    for event in events:
+        for key in event:
+            if key not in seen:
+                seen.add(key)
+                all_keys.append(key)
+
+    # Limit columns to avoid very wide tables
+    priority_keys = [
+        "timestamp", "action_type", "action_name", "view_name",
+        "session_id", "user_email",
+    ]
+    context_keys = sorted(k for k in all_keys if k.startswith("context."))
+    other_keys = [k for k in all_keys if k not in priority_keys and not k.startswith("context.")]
+
+    columns = [k for k in priority_keys if k in seen] + context_keys + other_keys
+
+    # Build table
+    col_widths = {}
+    for col in columns:
+        header_len = len(col)
+        max_val_len = max((len(str(e.get(col, ""))) for e in events), default=0)
+        col_widths[col] = min(max_width, max(header_len, max_val_len))
+
+    header = "| " + " | ".join(f"{col:<{col_widths[col]}}" for col in columns) + " |"
+    separator = "|" + "|".join("-" * (col_widths[col] + 2) for col in columns) + "|"
+
+    lines = [header, separator]
+    for event in events:
+        vals = []
+        for col in columns:
+            val = str(event.get(col, ""))
+            if len(val) > col_widths[col]:
+                val = val[: col_widths[col] - 3] + "..."
+            vals.append(f"{val:<{col_widths[col]}}")
+        lines.append("| " + " | ".join(vals) + " |")
+
+    return "\n".join(lines)
+
+
+def format_rum_events_as_text(events: List[Dict[str, str]]) -> str:
+    """Format RUM events as readable text."""
+    if not events:
+        return "No RUM events found."
+
+    lines = []
+    for event in events:
+        ts = event.get("timestamp", "")
+        action = event.get("action_name", event.get("type", ""))
+        view = event.get("view_name", "")
+        line = f"[{ts}] {action} on {view}"
+        lines.append(line)
+
+        for key, value in event.items():
+            if key not in ("timestamp", "action_name", "type", "view_name") and value:
+                lines.append(f"  {key}: {value}")
+
+    return "\n".join(lines)
+
+
 def extract_team_info(teams: List[Dict[str, Any]]) -> List[Dict[str, str]]:
     """Extract relevant information from team data."""
     team_list = []
