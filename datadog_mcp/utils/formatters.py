@@ -276,11 +276,35 @@ def extract_rum_event_info(events: List[Dict[str, Any]]) -> List[Dict[str, str]]
             entry["action_name"] = action.get("name", "")
             entry["action_type"] = action.get("type", "")
 
-        # View info
+        # View info — pass through timing metrics so view-type events
+        # are useful for performance analysis. Datadog reports timings
+        # in nanoseconds; convert to milliseconds for readability.
         view = inner.get("view", {})
         if view:
             entry["view_name"] = view.get("name", "")
             entry["view_url"] = view.get("url", "")
+            for ns_field in (
+                "loading_time",
+                "first_contentful_paint",
+                "largest_contentful_paint",
+                "first_input_delay",
+                "dom_complete",
+                "dom_content_loaded",
+                "dom_interactive",
+                "load_event",
+            ):
+                ns_value = view.get(ns_field)
+                if ns_value is not None:
+                    try:
+                        entry[f"view.{ns_field}_ms"] = str(int(ns_value) // 1_000_000)
+                    except (TypeError, ValueError):
+                        entry[f"view.{ns_field}"] = str(ns_value)
+            cls = view.get("cumulative_layout_shift")
+            if cls is not None:
+                entry["view.cumulative_layout_shift"] = str(cls)
+            loading_type = view.get("loading_type")
+            if loading_type:
+                entry["view.loading_type"] = str(loading_type)
 
         # Session info
         session = inner.get("session", {})
