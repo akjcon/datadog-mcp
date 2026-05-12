@@ -8,6 +8,7 @@ with the underlying datadog_client functions mocked out — so no real API calls
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from datadog_mcp.tools import (
@@ -20,6 +21,7 @@ from datadog_mcp.tools import (
     mute_monitor,
     delete_monitor,
 )
+from datadog_mcp.utils.datadog_client import _raise_with_body
 
 
 def _req(args):
@@ -236,6 +238,52 @@ class TestDeleteMonitor:
             }))
         mock_delete.assert_awaited_once_with(99, force=True)
         assert "deleted" in result.content[0].text
+
+
+# -------------------------------------------------------------------------
+# Error-body surfacing (v0.1.1) — Datadog write errors must include the
+# response body in the raised exception so callers can see WHY a 400 fired.
+# -------------------------------------------------------------------------
+
+class TestErrorBodySurfacing:
+    def _make_status_error(self, status_code: int, body: str) -> httpx.HTTPStatusError:
+        request = httpx.Request("POST", "https://api.datadoghq.com/api/v1/dashboard")
+        response = httpx.Response(status_code=status_code, text=body, request=request)
+        return httpx.HTTPStatusError("orig", request=request, response=response)
+
+    def test_raise_with_body_includes_response_text(self):
+        exc = self._make_status_error(400, '{"errors":["Invalid tag format. Valid tag keys are: team, ai."]}')
+        with pytest.raises(httpx.HTTPStatusError) as excinfo:
+            _raise_with_body("creating dashboard", exc)
+        message = str(excinfo.value)
+        assert "400" in message
+        assert "Invalid tag format" in message
+        assert "creating dashboard" in message
+
+    def test_raise_with_body_truncates_huge_payloads(self):
+        big_body = "x" * 5000
+        exc = self._make_status_error(422, big_body)
+        with pytest.raises(httpx.HTTPStatusError) as excinfo:
+            _raise_with_body("updating monitor 7", exc)
+        message = str(excinfo.value)
+        assert "truncated" in message
+        assert len(message) < 2500  # bounded
+
+    @pytest.mark.asyncio
+    async def test_tool_surfaces_api_body_in_result(self):
+        """End-to-end: when the underlying helper raises with body, the tool
+        result text should include that body (not just 'Client error')."""
+        exc = self._make_status_error(400, '{"errors":["Invalid tag format."]}')
+
+        async def boom(*_a, **_kw):
+            _raise_with_body("creating dashboard", exc)
+
+        with patch("datadog_mcp.tools.create_dashboard.create_dashboard", new=AsyncMock(side_effect=boom)):
+            result = await create_dashboard.handle_call(MagicMock(arguments={
+                "payload": {"title": "x", "layout_type": "ordered", "widgets": []},
+            }))
+        assert result.isError is True
+        assert "Invalid tag format" in result.content[0].text
 
 
 if __name__ == "__main__":

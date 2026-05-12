@@ -872,6 +872,24 @@ def _json_headers() -> Dict[str, str]:
     }
 
 
+def _raise_with_body(action: str, exc: httpx.HTTPStatusError) -> None:
+    """Re-raise an HTTPStatusError with the response body included in the message.
+
+    Datadog's write APIs put the actual reason for a 400/422 in the response
+    body (e.g. {"errors": ["Invalid tag format..."]}). Without surfacing it,
+    callers only see "Client error '400 Bad Request'" which is useless for
+    debugging. Truncate to keep tool output reasonable.
+    """
+    body = (exc.response.text or "").strip()
+    if len(body) > 2000:
+        body = body[:2000] + "... (truncated)"
+    raise httpx.HTTPStatusError(
+        f"Datadog API error {exc.response.status_code} while {action}: {body}",
+        request=exc.request,
+        response=exc.response,
+    ) from exc
+
+
 async def create_dashboard(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Create a new dashboard. `payload` is the full Datadog dashboard JSON."""
     url = f"{DATADOG_API_URL}/api/v1/dashboard"
@@ -882,7 +900,7 @@ async def create_dashboard(payload: Dict[str, Any]) -> Dict[str, Any]:
             return response.json()
         except httpx.HTTPStatusError as e:
             logger.error(f"HTTP error creating dashboard: {e.response.status_code} {e.response.text}")
-            raise
+            _raise_with_body("creating dashboard", e)
         except httpx.HTTPError as e:
             logger.error(f"HTTP error creating dashboard: {e}")
             raise
@@ -898,7 +916,7 @@ async def update_dashboard(dashboard_id: str, payload: Dict[str, Any]) -> Dict[s
             return response.json()
         except httpx.HTTPStatusError as e:
             logger.error(f"HTTP error updating dashboard {dashboard_id}: {e.response.status_code} {e.response.text}")
-            raise
+            _raise_with_body(f"updating dashboard {dashboard_id}", e)
         except httpx.HTTPError as e:
             logger.error(f"HTTP error updating dashboard {dashboard_id}: {e}")
             raise
@@ -914,7 +932,7 @@ async def get_dashboard(dashboard_id: str) -> Dict[str, Any]:
             return response.json()
         except httpx.HTTPStatusError as e:
             logger.error(f"HTTP error fetching dashboard {dashboard_id}: {e.response.status_code} {e.response.text}")
-            raise
+            _raise_with_body(f"fetching dashboard {dashboard_id}", e)
         except httpx.HTTPError as e:
             logger.error(f"HTTP error fetching dashboard {dashboard_id}: {e}")
             raise
@@ -930,7 +948,7 @@ async def delete_dashboard(dashboard_id: str) -> Dict[str, Any]:
             return response.json() if response.content else {"deleted_dashboard_id": dashboard_id}
         except httpx.HTTPStatusError as e:
             logger.error(f"HTTP error deleting dashboard {dashboard_id}: {e.response.status_code} {e.response.text}")
-            raise
+            _raise_with_body(f"deleting dashboard {dashboard_id}", e)
         except httpx.HTTPError as e:
             logger.error(f"HTTP error deleting dashboard {dashboard_id}: {e}")
             raise
@@ -951,7 +969,7 @@ async def create_monitor(payload: Dict[str, Any]) -> Dict[str, Any]:
             return response.json()
         except httpx.HTTPStatusError as e:
             logger.error(f"HTTP error creating monitor: {e.response.status_code} {e.response.text}")
-            raise
+            _raise_with_body("creating monitor", e)
         except httpx.HTTPError as e:
             logger.error(f"HTTP error creating monitor: {e}")
             raise
@@ -967,7 +985,7 @@ async def update_monitor(monitor_id: int, payload: Dict[str, Any]) -> Dict[str, 
             return response.json()
         except httpx.HTTPStatusError as e:
             logger.error(f"HTTP error updating monitor {monitor_id}: {e.response.status_code} {e.response.text}")
-            raise
+            _raise_with_body(f"updating monitor {monitor_id}", e)
         except httpx.HTTPError as e:
             logger.error(f"HTTP error updating monitor {monitor_id}: {e}")
             raise
@@ -1002,7 +1020,7 @@ async def mute_monitor(
             return response.json() if response.content else {"monitor_id": monitor_id, "action": action}
         except httpx.HTTPStatusError as e:
             logger.error(f"HTTP error {action}-ing monitor {monitor_id}: {e.response.status_code} {e.response.text}")
-            raise
+            _raise_with_body(f"{action}-ing monitor {monitor_id}", e)
         except httpx.HTTPError as e:
             logger.error(f"HTTP error {action}-ing monitor {monitor_id}: {e}")
             raise
@@ -1019,7 +1037,7 @@ async def delete_monitor(monitor_id: int, force: bool = False) -> Dict[str, Any]
             return response.json() if response.content else {"deleted_monitor_id": monitor_id}
         except httpx.HTTPStatusError as e:
             logger.error(f"HTTP error deleting monitor {monitor_id}: {e.response.status_code} {e.response.text}")
-            raise
+            _raise_with_body(f"deleting monitor {monitor_id}", e)
         except httpx.HTTPError as e:
             logger.error(f"HTTP error deleting monitor {monitor_id}: {e}")
             raise

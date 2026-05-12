@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.1.1] - 2026-05-12
+
+### Fixed
+- Surface Datadog's response body in raised exceptions from write tools. Previously, a 400 from `create_dashboard` (e.g. invalid tag key, malformed widget) only returned `Client error '400 Bad Request'` — the actual `{"errors": [...]}` body was logged to stderr but lost from the tool result. Now the response body is included in the raised `HTTPStatusError` and bubbles up into the tool's `isError` payload, so the LLM/user can see *why* the request was rejected and fix the payload.
+
 ## [v0.1.0] - 2026-05-12
 
 ### Added
