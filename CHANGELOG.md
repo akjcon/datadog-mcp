@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.1.0] - 2026-05-12
+
+### Added
+- **Write tools — dashboards**
+  - `create_dashboard` — create a new dashboard from a full JSON payload (`title`, `layout_type`, `widgets` required)
+  - `update_dashboard` — replace an existing dashboard by id (full PUT — omitted fields are cleared)
+  - `get_dashboard` — fetch a dashboard's full JSON (use before `update_dashboard` to inspect/diff)
+  - `delete_dashboard` — destructive; gated by `confirm=true` (dry-runs otherwise)
+- **Write tools — monitors**
+  - `create_monitor` — create a new monitor (`type`, `query`, `name` required)
+  - `update_monitor` — partial edit by id (only fields supplied are changed)
+  - `mute_monitor` — mute/unmute, optionally scoped (`scope`) and time-bounded (`end`)
+  - `delete_monitor` — destructive; gated by `confirm=true`, supports `force` for SLO-referenced monitors
+- Test coverage for the eight new tools in `tests/test_write_tools.py` (17 cases)
+
+### Notes
+- Destructive tools (`delete_dashboard`, `delete_monitor`) default to a dry-run that reports the target id; pass `confirm=true` to perform the deletion. This guards against accidental destructive calls when the LLM misroutes a write.
+- Tool output formats follow the existing convention: `summary` (default, human-readable) and `json` (raw response).
+
 ## [v0.0.6] - 2025-07-14
 
 ### Added

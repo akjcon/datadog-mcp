@@ -14,7 +14,31 @@ from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
 from mcp.types import Tool, ServerCapabilities, TextContent
 
-from .tools import get_fingerprints, list_pipelines, get_logs, get_teams, get_metrics, get_metric_fields, get_metric_field_values, list_metrics, list_service_definitions, get_service_definition, list_monitors, list_slos, get_logs_field_values, get_rum_events
+from .tools import (
+    get_fingerprints,
+    list_pipelines,
+    get_logs,
+    get_teams,
+    get_metrics,
+    get_metric_fields,
+    get_metric_field_values,
+    list_metrics,
+    list_service_definitions,
+    get_service_definition,
+    list_monitors,
+    list_slos,
+    get_logs_field_values,
+    get_rum_events,
+    # Write tools (added in 0.1.0)
+    create_dashboard,
+    update_dashboard,
+    get_dashboard,
+    delete_dashboard,
+    create_monitor,
+    update_monitor,
+    mute_monitor,
+    delete_monitor,
+)
 
 # Configure logging
 logging.basicConfig(
@@ -84,6 +108,40 @@ TOOLS = {
     "get_rum_events": {
         "definition": get_rum_events.get_tool_definition,
         "handler": get_rum_events.handle_call,
+    },
+    # ---- Write tools (dashboards) ----
+    "create_dashboard": {
+        "definition": create_dashboard.get_tool_definition,
+        "handler": create_dashboard.handle_call,
+    },
+    "update_dashboard": {
+        "definition": update_dashboard.get_tool_definition,
+        "handler": update_dashboard.handle_call,
+    },
+    "get_dashboard": {
+        "definition": get_dashboard.get_tool_definition,
+        "handler": get_dashboard.handle_call,
+    },
+    "delete_dashboard": {
+        "definition": delete_dashboard.get_tool_definition,
+        "handler": delete_dashboard.handle_call,
+    },
+    # ---- Write tools (monitors) ----
+    "create_monitor": {
+        "definition": create_monitor.get_tool_definition,
+        "handler": create_monitor.handle_call,
+    },
+    "update_monitor": {
+        "definition": update_monitor.get_tool_definition,
+        "handler": update_monitor.handle_call,
+    },
+    "mute_monitor": {
+        "definition": mute_monitor.get_tool_definition,
+        "handler": mute_monitor.handle_call,
+    },
+    "delete_monitor": {
+        "definition": delete_monitor.get_tool_definition,
+        "handler": delete_monitor.handle_call,
     },
 }
 

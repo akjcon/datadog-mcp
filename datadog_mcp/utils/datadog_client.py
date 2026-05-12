@@ -843,17 +843,183 @@ async def fetch_slo_history(
     
     if target is not None:
         params["target"] = target
-    
+
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url, headers=headers, params=params)
             response.raise_for_status()
             data = response.json()
             return data.get("data", {})
-            
+
         except httpx.HTTPError as e:
             logger.error(f"HTTP error fetching SLO history: {e}")
             raise
         except Exception as e:
             logger.error(f"Error fetching SLO history: {e}")
+            raise
+
+
+# -------------------------------------------------------------------------
+# Dashboard CRUD (Datadog Dashboards API v1)
+# https://docs.datadoghq.com/api/latest/dashboards/
+# -------------------------------------------------------------------------
+
+def _json_headers() -> Dict[str, str]:
+    return {
+        "Content-Type": "application/json",
+        "DD-API-KEY": DATADOG_API_KEY,
+        "DD-APPLICATION-KEY": DATADOG_APP_KEY,
+    }
+
+
+async def create_dashboard(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Create a new dashboard. `payload` is the full Datadog dashboard JSON."""
+    url = f"{DATADOG_API_URL}/api/v1/dashboard"
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.post(url, headers=_json_headers(), json=payload)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error creating dashboard: {e.response.status_code} {e.response.text}")
+            raise
+        except httpx.HTTPError as e:
+            logger.error(f"HTTP error creating dashboard: {e}")
+            raise
+
+
+async def update_dashboard(dashboard_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Replace an existing dashboard by id with the given JSON."""
+    url = f"{DATADOG_API_URL}/api/v1/dashboard/{dashboard_id}"
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.put(url, headers=_json_headers(), json=payload)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error updating dashboard {dashboard_id}: {e.response.status_code} {e.response.text}")
+            raise
+        except httpx.HTTPError as e:
+            logger.error(f"HTTP error updating dashboard {dashboard_id}: {e}")
+            raise
+
+
+async def get_dashboard(dashboard_id: str) -> Dict[str, Any]:
+    """Fetch a single dashboard by id."""
+    url = f"{DATADOG_API_URL}/api/v1/dashboard/{dashboard_id}"
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.get(url, headers=_json_headers())
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error fetching dashboard {dashboard_id}: {e.response.status_code} {e.response.text}")
+            raise
+        except httpx.HTTPError as e:
+            logger.error(f"HTTP error fetching dashboard {dashboard_id}: {e}")
+            raise
+
+
+async def delete_dashboard(dashboard_id: str) -> Dict[str, Any]:
+    """Delete a dashboard by id. Caller must enforce confirmation."""
+    url = f"{DATADOG_API_URL}/api/v1/dashboard/{dashboard_id}"
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.delete(url, headers=_json_headers())
+            response.raise_for_status()
+            return response.json() if response.content else {"deleted_dashboard_id": dashboard_id}
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error deleting dashboard {dashboard_id}: {e.response.status_code} {e.response.text}")
+            raise
+        except httpx.HTTPError as e:
+            logger.error(f"HTTP error deleting dashboard {dashboard_id}: {e}")
+            raise
+
+
+# -------------------------------------------------------------------------
+# Monitor CRUD (Datadog Monitors API v1)
+# https://docs.datadoghq.com/api/latest/monitors/
+# -------------------------------------------------------------------------
+
+async def create_monitor(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Create a new monitor. `payload` is the full Datadog monitor JSON."""
+    url = f"{DATADOG_API_URL}/api/v1/monitor"
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.post(url, headers=_json_headers(), json=payload)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error creating monitor: {e.response.status_code} {e.response.text}")
+            raise
+        except httpx.HTTPError as e:
+            logger.error(f"HTTP error creating monitor: {e}")
+            raise
+
+
+async def update_monitor(monitor_id: int, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Edit an existing monitor by id."""
+    url = f"{DATADOG_API_URL}/api/v1/monitor/{monitor_id}"
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.put(url, headers=_json_headers(), json=payload)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error updating monitor {monitor_id}: {e.response.status_code} {e.response.text}")
+            raise
+        except httpx.HTTPError as e:
+            logger.error(f"HTTP error updating monitor {monitor_id}: {e}")
+            raise
+
+
+async def mute_monitor(
+    monitor_id: int,
+    scope: Optional[str] = None,
+    end: Optional[int] = None,
+    unmute: bool = False,
+) -> Dict[str, Any]:
+    """Mute (or unmute) a monitor.
+
+    Args:
+        monitor_id: The numeric monitor id.
+        scope: Optional scope to mute (e.g. "env:prod"). Ignored on unmute.
+        end: Optional unix timestamp at which the mute should expire.
+        unmute: If True, hits the /unmute endpoint instead.
+    """
+    action = "unmute" if unmute else "mute"
+    url = f"{DATADOG_API_URL}/api/v1/monitor/{monitor_id}/{action}"
+    params: Dict[str, Any] = {}
+    if not unmute:
+        if scope:
+            params["scope"] = scope
+        if end is not None:
+            params["end"] = end
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.post(url, headers=_json_headers(), params=params)
+            response.raise_for_status()
+            return response.json() if response.content else {"monitor_id": monitor_id, "action": action}
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error {action}-ing monitor {monitor_id}: {e.response.status_code} {e.response.text}")
+            raise
+        except httpx.HTTPError as e:
+            logger.error(f"HTTP error {action}-ing monitor {monitor_id}: {e}")
+            raise
+
+
+async def delete_monitor(monitor_id: int, force: bool = False) -> Dict[str, Any]:
+    """Delete a monitor by id. `force=True` deletes even if referenced by SLOs."""
+    url = f"{DATADOG_API_URL}/api/v1/monitor/{monitor_id}"
+    params = {"force": "true"} if force else None
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.delete(url, headers=_json_headers(), params=params)
+            response.raise_for_status()
+            return response.json() if response.content else {"deleted_monitor_id": monitor_id}
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error deleting monitor {monitor_id}: {e.response.status_code} {e.response.text}")
+            raise
+        except httpx.HTTPError as e:
+            logger.error(f"HTTP error deleting monitor {monitor_id}: {e}")
             raise
